@@ -1,0 +1,517 @@
+TITLE Sort Random Integers     (sortRandInts.asm)
+
+; Author: Stephen Di Rienzo
+; Last Modified: 05/24/2019
+; OSU email address: 
+; Course number/section: CS271-400
+; Project Number: Programming Assignment 5    Due Date: 05/26/2019
+; Description: This program will (1) Introduce the program to the user, (2) Get a user request [10, 200]
+;              (3) Generate requested # of random integers [100, 999] and store them in an array,
+;              (4) Display the list of integers unsorted 10 numbers per line, (5) Sort array in
+;              descending order, (6) Calculate and display the median (rounded to nearest integer),
+;              and (7) Display the sorted array 10 numbers per line
+
+INCLUDE Irvine32.inc
+
+MIN_REQ = 10
+MAX_REQ = 200
+LO_RAND = 100
+HIGH_RAND = 999
+NUMS_PER_LINE = 10
+
+.data
+
+intro_1        BYTE      "Sorting Random Integers       Programed by Stephen Di Rienzo",0
+instructions   BYTE      "This program generates random numbers in the range [100 .. 999],",0dh, 0ah
+               BYTE      "displays the original list, sorts the list, and calculates the",0dh, 0ah
+               BYTE      "median value. Finally, it displays the list sorted in descending order.",0
+prompt_1       BYTE      "How many numbers should be generated? [10 .. 200]: ",0
+prompt_2       BYTE      "Invalid input",0
+request        DWORD     ?
+list           DWORD     MAX_REQ   DUP(?)
+arrTitle_1     BYTE      "The unsorted random numbers:",0
+arrTitle_2     BYTE      "The sorted list:",0
+numSpace       BYTE      "   ",0
+medTitle_1     BYTE      "The median is ",0
+
+
+.code
+main PROC
+     call      Randomize
+
+     push      OFFSET intro_1
+     push      OFFSET instructions
+     call      introduction
+
+     push      OFFSET prompt_1
+     push      OFFSET prompt_2
+     push      OFFSET request
+     call      getData
+     call      Crlf
+
+     push      request
+     push      OFFSET list
+     call      fillArray
+
+     push      OFFSET list
+     push      request
+     push      OFFSET arrTitle_1
+     push      OFFSET numSpace
+     call      displayList
+
+     push      OFFSET list
+     push      request
+     call      sortList
+
+     push      OFFSET list
+     push      request
+     push      OFFSET medTitle_1
+     call      displayMedian
+
+     push      OFFSET list
+     push      request
+     push      OFFSET arrTitle_2
+     push      OFFSET numSpace
+     call      displayList
+
+	exit	; exit to operating system
+main ENDP
+
+;------------------------------------------------------------------------
+; introduction {parameters: intro (reference), instructions (reference)}
+;
+; Introduce the program and programmer
+; to the user. Display the instructions
+; to the user
+; 
+; Receives: addresses of parameters on sys stack
+; Returns: None
+; Pre: None
+; Registers Changed: None
+;------------------------------------------------------------------------
+introduction PROC
+     push      ebp
+     mov       ebp, esp
+     push      edx
+     mov       edx, [ebp+12]
+     call      WriteString
+     call      Crlf
+     call      Crlf
+     mov       edx, [ebp+8]
+     call      WriteString
+     call      Crlf
+     call      Crlf
+     pop       edx
+     pop       ebp
+     ret       8
+introduction ENDP
+
+;------------------------------------------------------------------------
+; getData {parameters: prompt1 (reference), prompt2 (reference), request (reference)}
+;
+; Get the number of random integers to generate and display.
+; Validate the number entered is [10, 200], and continue 
+; to prompt user for valid number if not.
+; Continue to prompt until valid number is entered
+; 
+; Receives: addresses of parameters on sys stack
+; Returns: user request for # of random integers
+; Pre: MIN_REQ and MAX_REQ constants are defined
+; Registers Changed: None
+;------------------------------------------------------------------------
+getData  PROC
+LOCAL userInput:SDWORD, 
+      isValid:DWORD 
+          push      eax
+          push      ebx
+          push      edx
+     GetInput:
+          mov       edx, [ebp+16]
+          call      WriteString
+          call      ReadInt
+          mov       userInput, eax
+          push      userInput
+          lea       eax, isValid   
+          push      eax            
+          call      validate
+          cmp       isValid, 1
+          je        InRange
+          mov       edx, [ebp+12]
+          call      WriteString
+          call      Crlf
+          jmp       GetInput
+     InRange:
+          mov       eax, userInput
+          mov       ebx, [ebp+8]
+          mov       [ebx], eax
+          pop       edx
+          pop       ebx
+          pop       eax
+          ret       12
+getData  ENDP
+
+;------------------------------------------------------------------------
+; validate {parameters:  input (value), isValid (reference)}
+;
+; Utility PROC for getData
+; Validates whether userInput [MIN_REQ, MAX_REQ]  
+; 
+; Receives: values/addresses of parameters on sys stack
+; Returns: 1 if input [MIN_REQ, MAX_REQ], else 0
+; Pre: *same as getUserData
+; Registers Changed: None
+;------------------------------------------------------------------------
+validate  PROC
+          push      ebp
+          mov       ebp, esp
+          push      eax
+          push      ebx
+          mov       eax, MIN_REQ
+          cmp       [ebp+12], eax
+          jl        Invalid
+          mov       eax, MAX_REQ
+          cmp       [ebp+12], eax
+          jg        Invalid
+          jmp       Valid
+     Invalid:
+          mov       eax, [ebp+8]
+          mov       ebx, 0
+          mov       [eax], ebx
+          jmp       EndVald
+     Valid:
+          mov       eax, [ebp+8]
+          mov       ebx, 1
+          mov       [eax], ebx
+     EndVald:
+          pop       ebx
+          pop       eax
+          pop       ebp
+          ret       8
+validate  ENDP
+
+;------------------------------------------------------------------------
+; fillArray {parameters: request (value), array (reference)}
+;
+; Generate request-number of random integers and add them to array.
+; 
+; Receives: addresses of parameters on sys stack
+; Returns: array filled with random integers
+; Pre: None
+; Registers Changed: None
+;------------------------------------------------------------------------
+fillArray  PROC
+LOCAL max:DWORD,
+      count:DWORD,
+      num:DWORD
+          push      eax
+          push      ebx
+          push      esi
+          mov       eax, 0
+          mov       count, eax
+          mov       ebx, [ebp+12]
+          mov       max, ebx
+          mov       esi, [ebp+8]
+     GenNum:
+          mov       eax, HIGH_RAND+1
+          call      RandomRange
+          mov       num, eax
+          cmp       eax, LO_RAND
+          jl        GenNum
+          mov       eax, count
+          cmp       eax, max
+          jge       StopLoop
+          mov       eax, num
+          mov       [esi], eax
+          add       esi, 4
+          mov       ebx, count
+          inc       ebx
+          mov       count, ebx
+          jmp       GenNum
+     StopLoop:
+          pop       esi
+          pop       ebx
+          pop       eax
+          ret       8
+fillArray ENDP
+
+;------------------------------------------------------------------------
+; displayList {parameters: array (reference), request(value), title(reference), space(reference)}
+;
+; Displays the title of the array, and then displays the content of the
+; array NUMS_PER_LINE items per line.
+; 
+; Receives: addresses of parameters on sys stack
+; Returns: None
+; Pre: None
+; Registers Changed: None
+;------------------------------------------------------------------------
+displayList PROC
+LOCAL max:DWORD,
+      count:DWORD,
+      numCount:DWORD
+          push      eax
+          push      ebx
+          push      edx
+          push      esi
+          mov       count, 0
+          mov       numCount, 0
+          mov       edx, [ebp+12]
+          mov       ebx, [ebp+16]
+          mov       max, ebx
+          mov       esi, [ebp+20]
+          call      WriteString
+          call      Crlf
+     L1:
+          mov       eax, count
+          cmp       eax, max
+          jge       EndL1
+          cmp       numCount, NUMS_PER_LINE  ;check if 10 #'s have been written to current line
+          jl        SameLine                 ;if not, write to same line, else make new line
+          call      Crlf                     ;and then write to new line
+          mov       numCount, 0
+     SameLine:
+          mov       eax, [esi]
+          call      WriteDec
+          mov       edx, [ebp+8]
+          call      WriteString
+          mov       eax, numCount
+          inc       eax
+          mov       numCount, eax
+          mov       eax, count
+          inc       eax
+          mov       count, eax
+          add       esi, 4
+          jmp       L1
+     EndL1:
+          call      Crlf
+          call      Crlf
+          pop       esi
+          pop       edx
+          pop       ebx
+          pop       eax
+          ret       16
+displayList ENDP
+
+;------------------------------------------------------------------------
+; sortList {parameters: array (reference), request(value)}
+;
+; Sorts the array in descending order via the Selection Sort algorithm
+; 
+; Receives: addresses of parameters on sys stack
+; Returns: array sorted in descending order
+; Pre: None
+; Registers Changed: None
+;------------------------------------------------------------------------
+sortList  PROC
+LOCAL max:DWORD,
+      i:DWORD,
+      j:DWORD,
+      k:DWORD,
+      idxI:DWORD,
+      idxJ:DWORD,
+      idxK:DWORD,
+      val1:DWORD,
+      val2:DWORD
+          push      eax
+          push      ebx
+          push      ecx
+          push      edx
+          push      esi
+          mov       k, 0
+          mov       eax, [ebp+8]
+          mov       max, eax
+
+          mov       esi, [ebp+12]
+     L2:
+          mov       eax, k
+          mov       ebx, max
+          dec       ebx
+          cmp       eax, ebx
+          jge       EndL2
+          mov       eax, k
+          mov       i, eax
+          inc       eax
+          mov       j, eax
+     L3:
+          mov       eax, j
+          cmp       eax, max
+          jge       EndL3
+          mov       eax, j
+          mov       ebx, 4
+          mul       ebx
+          mov       idxJ, eax
+          mov       eax, i
+          mov       ebx, 4
+          mul       ebx
+          mov       idxI, eax
+          add       esi, idxJ
+          mov       eax, [esi]
+          mov       val1, eax
+          sub       esi, idxJ
+          add       esi, idxI
+          mov       eax, [esi]
+          mov       val2, eax
+          sub       esi, idxI
+          mov       eax, val1
+          cmp       eax, val2
+          jle       EndI3
+          mov       eax, j
+          mov       i, eax
+     EndI3:
+          mov       eax, j
+          inc       eax
+          mov       j, eax
+          jmp       L3
+     EndL3:
+          mov       ecx, [ebp+12]
+          push      k
+          push      i
+          push      ecx
+          call      exchgElems
+          mov       eax, k
+          inc       eax
+          mov       k, eax
+          jmp       L2
+     EndL2:
+          pop       esi
+          pop       edx
+          pop       ecx
+          pop       ebx
+          pop       eax
+          ret       8
+sortList  ENDP
+
+;------------------------------------------------------------------------
+; exchElems {parameters: k (value), i (value), array (reference)}
+;
+; Exchanges the values of array[k] and array[i]
+; 
+; Receives: addresses of parameters on sys stack
+; Returns: array with values of array[k] and array[i] swapped
+; Pre: None
+; Registers Changed: None
+;------------------------------------------------------------------------
+exchgElems PROC
+LOCAL i:DWORD,
+      k:DWORD,
+      idxI:DWORD,
+      idxK:DWORD,
+      temp:DWORD
+          push      eax
+          push      ebx
+          push      edx
+          push      esi
+          mov       eax, [ebp+16]
+          mov       k, eax
+          mov       ebx, [ebp+12]
+          mov       i, ebx
+          mov       esi, [ebp+8]
+          mov       eax, k
+          mov       ebx, 4
+          mul       ebx
+          mov       idxK, eax
+          mov       eax, i
+          mov       ebx, 4
+          mul       ebx
+          mov       idxI, eax
+          add       esi, idxK
+          mov       eax, [esi]
+          sub       esi, idxK
+          mov       temp, eax
+          add       esi, idxI
+          mov       ebx, [esi]
+          sub       esi, idxI
+          add       esi, idxK
+          mov       [esi], ebx
+          sub       esi, idxK
+          mov       eax, temp
+          add       esi, idxI
+          mov       [esi], eax
+          pop       esi
+          pop       edx
+          pop       ebx
+          pop       eax
+          ret       12
+exchgElems ENDP
+
+;------------------------------------------------------------------------
+; displayMedian {parameters: array (reference), request (value), title (reference)}
+;
+; Determines and displays the median of an array. If odd # of values,
+; then displays the middle value, else if even # of values,
+; then displays the average of the middle 2 values
+; Average = (((sum * 100)/2) - 40) / 100
+; 
+; Receives: addresses of parameters on sys stack
+; Returns: None
+; Pre: None
+; Registers Changed: None
+;------------------------------------------------------------------------
+displayMedian PROC
+LOCAL median:DWORD,
+      sum:DWORD,
+      count:DWORD,
+      idxI:DWORD,
+      idxK:DWORD
+          push      eax
+          push      ebx
+          push      ecx
+          push      edx
+          push      esi
+          mov       sum, 0
+          mov       eax, [ebp+12]
+          mov       count, eax
+          mov       esi, [ebp+16]
+          mov       eax, count
+          mov       ebx, 2
+          cdq
+          div       ebx
+          cmp       edx, 0
+          je        EvenNums
+          mov       ebx, 4
+          mul       ebx
+          add       esi, eax
+          mov       eax, [esi]
+          mov       median, eax
+          jmp       EndChk
+     EvenNums:
+          mov       ecx, eax
+          mov       ebx, 4
+          mul       ebx
+          mov       idxI, eax
+          dec       ecx
+          mov       eax, ecx
+          mul       ebx
+          mov       idxK, eax
+          add       esi, idxI
+          mov       eax, [esi]
+          add       sum, eax
+          sub       esi, idxI
+          add       esi, idxK
+          mov       eax, [esi]
+          add       sum, eax
+          mov       eax, sum
+          mov       ebx, 100
+          mul       ebx                      ;eax = (sum * 100)
+          mov       ebx, 2
+          div       ebx                      ;eax = (sum * 100)/2
+          add       eax, -40                 ;eax = ((sum * 100)/2) - 40
+          mov       ebx, 100
+          div       ebx                      ;eax = (((sum * 100)/2) - 40) / 100
+          mov       median, eax
+     EndChk:
+          mov       edx, [ebp+8]
+          call      WriteString
+          mov       eax, median
+          call      WriteDec
+          call      Crlf
+          call      Crlf
+          pop       esi
+          pop       edx
+          pop       ecx
+          pop       ebx
+          pop       eax
+          ret       12
+displayMedian ENDP
+
+END main
